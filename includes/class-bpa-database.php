@@ -60,4 +60,55 @@ class BPA_Database {
 			self::install();
 		}
 	}
+    	/**
+         * Writes one event. Returns true if a row was created,
+         * false if it was a duplicate the database rejected.
+         */
+        public static function insert_event( $consultant_id, $event_type, $visitor_hash, $event_day, $created_at, $source_page, $dedupe_key ) {
+            global $wpdb;
+
+            $table = self::table_name();
+
+            /*
+            * IMPORTANT: dedupe_key must be a genuine NULL for clicks.
+            *
+            * $wpdb->prepare() turns a PHP null into an empty string ''.
+            * An empty string is a REAL value, so the unique constraint would
+            * apply to it, and the second phone click would be rejected.
+            *
+            * So when there is no dedupe key, we write the word NULL directly
+            * into the query instead of passing it as a value.
+            */
+            if ( null === $dedupe_key ) {
+                $sql = $wpdb->prepare(
+                    "INSERT IGNORE INTO $table
+                    (consultant_id, event_type, visitor_hash, event_day, created_at, source_page, dedupe_key)
+                    VALUES (%d, %s, %s, %s, %s, %s, NULL)",
+                    $consultant_id,
+                    $event_type,
+                    $visitor_hash,
+                    $event_day,
+                    $created_at,
+                    $source_page
+                );
+            } else {
+                $sql = $wpdb->prepare(
+                    "INSERT IGNORE INTO $table
+                    (consultant_id, event_type, visitor_hash, event_day, created_at, source_page, dedupe_key)
+                    VALUES (%d, %s, %s, %s, %s, %s, %s)",
+                    $consultant_id,
+                    $event_type,
+                    $visitor_hash,
+                    $event_day,
+                    $created_at,
+                    $source_page,
+                    $dedupe_key
+                );
+            }
+
+            $wpdb->query( $sql );
+
+            // 1 = a row was inserted. 0 = a duplicate was ignored.
+            return $wpdb->rows_affected > 0;
+        }
 }

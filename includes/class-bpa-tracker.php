@@ -10,6 +10,126 @@ if ( ! defined( 'ABSPATH' ) ) {
 class BPA_Tracker {
 
 	/**
+	 * Registers our REST endpoint.
+	 */
+	public static function register_routes() {
+		register_rest_route(
+			'blueprint-analytics/v1',
+			'/event',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_event' ),
+				// Public endpoint: anonymous visitors must be able to reach it.
+				// Protection comes from validation and rate limiting, not login.
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'consultant_id' => array(
+						'required'          => true,
+						'validate_callback' => function ( $value ) {
+							return is_numeric( $value ) && absint( $value ) > 0;
+						},
+						'sanitize_callback' => 'absint',
+					),
+					'event_type'    => array(
+						'required'          => true,
+						'validate_callback' => array( __CLASS__, 'is_valid_event_type' ),
+						'sanitize_callback' => 'sanitize_key',
+					),
+					'source_page'   => array(
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Simple rate limit: max 60 events per visitor per minute.
+	 * Generous for a real person, restrictive for a script.
+	 */
+	private static function is_rate_limited() {
+		$key   = 'bpa_rl_' . substr( self::visitor_hash(), 0, 32 );
+		$count = (int) get_transient( $key );
+
+		if ( $count >= 60 ) {
+			return true;
+		}
+
+		set_transient( $key, $count + 1, MINUTE_IN_SECONDS );
+		return false;
+	}
+
+	/**
+	 * Handles an incoming event.
+	 */
+	public static function handle_event( WP_REST_Request $request ) {
+		$consultant_id = $request->get_param( 'consultant_id' );
+		$event_type    = $request->get_param( 'event_type' );
+		$source_page   = $request->get_param( 'source_page' );
+
+		if ( self::is_rate_limited() ) {
+			return new WP_REST_Response( null, 429 );
+		}
+
+		// The single gate from Step 3.
+		if ( ! self::should_record( $consultant_id, $event_type ) ) {
+			// Deliberately still a 204. We never reveal WHY something
+			// was rejected, because that tells a probing script how
+			// to get past the filters.
+			return new WP_REST_Response( null, 204 );
+		}
+
+		BPA_Database::insert_event(
+			$consultant_id,
+			$event_type,
+			self::visitor_hash(),
+			self::today(),
+			self::now(),
+			$source_page ? substr( $source_page, 0, 255 ) : null,
+			self::dedupe_key( $consultant_id, $event_type )
+		);
+
+		return new WP_REST_Response( null, 204 );
+	}
+
+    /**
+	 * Loads the tracking script on single consultant profiles.
+	 *
+	 * Note: we load this for EVERYONE, including administrators.
+	 * See 4.3 above. The exclusion happens at the endpoint,
+	 * so the cached HTML stays identical for all visitors.
+	 */
+	public static function enqueue_assets() {
+		if ( ! is_singular( 'business' ) ) {
+			return;
+		}
+
+		$consultant_id = get_queried_object_id();
+
+		if ( ! $consultant_id ) {
+			return;
+		}
+
+		wp_enqueue_script(
+			'bpa-tracker',
+			BPA_URL . 'assets/js/bpa-tracker.js',
+			array(),
+			BPA_VERSION,
+			true // load in the footer, after the page content
+		);
+
+		wp_localize_script(
+			'bpa-tracker',
+			'bpaData',
+			array(
+				'endpoint'     => rest_url( 'blueprint-analytics/v1/event' ),
+				'consultantId' => (int) $consultant_id,
+			)
+		);
+	}
+
+	/**
 	 * The three event types we accept. Anything else is rejected.
 	 */
 	const EVENT_TYPES = array( 'profile_view', 'phone_click', 'website_click' );
