@@ -46,19 +46,26 @@ register_activation_hook( __FILE__, 'bpa_activate' );
  */
 add_action( 'plugins_loaded', 'BPA_Database::maybe_upgrade' );
 
-/**
- * Temporary confirmation notice. Removed in Step 3.
- */
-function bpa_temp_table_notice() {
-	global $wpdb;
-	$table  = BPA_Database::table_name();
-	$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+require_once BPA_PATH . 'includes/class-bpa-tracker.php';
 
-	if ( $exists === $table ) {
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table" );
-		echo '<div class="notice notice-success"><p><strong>Blueprint Analytics:</strong> table <code>' . esc_html( $table ) . '</code> exists. Rows: ' . esc_html( $count ) . '</p></div>';
-	} else {
-		echo '<div class="notice notice-error"><p><strong>Blueprint Analytics:</strong> table missing. Deactivate and reactivate the plugin.</p></div>';
-	}
+/**
+ * TEMPORARY diagnostic panel. Removed in Step 4.
+ * Shows how the rules evaluate for whoever is looking at it.
+ */
+function bpa_temp_rules_panel() {
+	$is_internal = BPA_Tracker::is_internal_traffic();
+	$is_bot      = BPA_Tracker::is_bot();
+	$hash        = BPA_Tracker::visitor_hash();
+
+	echo '<div class="notice notice-info"><p><strong>Blueprint Analytics diagnostics</strong></p><ul style="margin-left:1em">';
+	echo '<li>Site date (Sydney): <code>' . esc_html( BPA_Tracker::today() ) . '</code></li>';
+	echo '<li>Site time: <code>' . esc_html( BPA_Tracker::now() ) . '</code></li>';
+	echo '<li>Your fingerprint: <code>' . esc_html( substr( $hash, 0, 16 ) ) . '...</code></li>';
+	echo '<li>Internal traffic (excluded)? <strong>' . ( $is_internal ? 'YES' : 'no' ) . '</strong></li>';
+	echo '<li>Detected as bot? <strong>' . ( $is_bot ? 'YES' : 'no' ) . '</strong></li>';
+	echo '<li>Would a view be recorded? <strong>' . ( ( ! $is_internal && ! $is_bot ) ? 'yes' : 'NO' ) . '</strong></li>';
+	echo '</ul></div>';
+    echo '<li>REMOTE_ADDR: <code>' . esc_html( $_SERVER['REMOTE_ADDR'] ?? 'none' ) . '</code></li>';
+    echo '<li>X-Forwarded-For: <code>' . esc_html( $_SERVER['HTTP_X_FORWARDED_FOR'] ?? 'none' ) . '</code></li>';
 }
-add_action( 'admin_notices', 'bpa_temp_table_notice' );
+add_action( 'admin_notices', 'bpa_temp_rules_panel' );
