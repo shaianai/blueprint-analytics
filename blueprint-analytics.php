@@ -30,7 +30,35 @@ define( 'BPA_URL', plugin_dir_url( __FILE__ ) );
  * Temporary proof-of-life message in the admin.
  * We delete this in Step 2. It exists only to confirm the plugin is loading.
  */
-function bpa_temporary_hello_notice() {
-	echo '<div class="notice notice-success"><p><strong>Blueprint Analytics</strong> is active. Version ' . esc_html( BPA_VERSION ) . '</p></div>';
+// Load our database class.
+require_once BPA_PATH . 'includes/class-bpa-database.php';
+
+/**
+ * Runs once, the moment the plugin is activated.
+ */
+function bpa_activate() {
+	BPA_Database::install();
 }
-add_action( 'admin_notices', 'bpa_temporary_hello_notice' );
+register_activation_hook( __FILE__, 'bpa_activate' );
+
+/**
+ * Runs on every load, but only acts if the table structure is outdated.
+ */
+add_action( 'plugins_loaded', 'BPA_Database::maybe_upgrade' );
+
+/**
+ * Temporary confirmation notice. Removed in Step 3.
+ */
+function bpa_temp_table_notice() {
+	global $wpdb;
+	$table  = BPA_Database::table_name();
+	$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+
+	if ( $exists === $table ) {
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table" );
+		echo '<div class="notice notice-success"><p><strong>Blueprint Analytics:</strong> table <code>' . esc_html( $table ) . '</code> exists. Rows: ' . esc_html( $count ) . '</p></div>';
+	} else {
+		echo '<div class="notice notice-error"><p><strong>Blueprint Analytics:</strong> table missing. Deactivate and reactivate the plugin.</p></div>';
+	}
+}
+add_action( 'admin_notices', 'bpa_temp_table_notice' );
