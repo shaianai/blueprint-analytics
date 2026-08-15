@@ -36,10 +36,15 @@ require_once BPA_PATH . 'includes/class-bpa-database.php';
 /**
  * Runs once, the moment the plugin is activated.
  */
+require_once BPA_PATH . 'includes/class-bpa-admin.php';
+
 function bpa_activate() {
 	BPA_Database::install();
+	BPA_Admin::add_capability();   // ← add this line
 }
 register_activation_hook( __FILE__, 'bpa_activate' );
+
+add_action( 'admin_menu', 'BPA_Admin::register_menu' );
 
 /**
  * Runs on every load, but only acts if the table structure is outdated.
