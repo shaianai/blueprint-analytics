@@ -55,3 +55,9 @@ require_once BPA_PATH . 'includes/class-bpa-tracker.php';
 
 add_action( 'rest_api_init', 'BPA_Tracker::register_routes' );
 add_action( 'wp_enqueue_scripts', 'BPA_Tracker::enqueue_assets' );
+
+require_once BPA_PATH . 'includes/class-bpa-phone.php';
+// Shortcode approach kept for reference. Not used: the JS conversion
+// below handles both single and multi location templates without
+// requiring template changes.
+// add_action( 'init', 'BPA_Phone::register' );

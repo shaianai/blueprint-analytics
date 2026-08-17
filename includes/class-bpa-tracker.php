@@ -101,6 +101,12 @@ class BPA_Tracker {
 	 * so the cached HTML stays identical for all visitors.
 	 */
 	public static function enqueue_assets() {
+		wp_enqueue_style(
+			'bpa-style',
+			BPA_URL . 'assets/css/bpa.css',
+			array(),
+			BPA_VERSION
+		);
 		if ( ! is_singular( 'business' ) ) {
 			return;
 		}

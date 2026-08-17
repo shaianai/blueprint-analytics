@@ -1,0 +1,12 @@
+.bpa-phone-wrap { display: inline-block; }
+.bpa-phone-button {
+	cursor: pointer;
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	color: inherit;
+	text-decoration: underline;
+}
+.bpa-phone-revealed { font-weight: 600; }
+.bpa-phone-none { color: #666; font-style: italic; }
