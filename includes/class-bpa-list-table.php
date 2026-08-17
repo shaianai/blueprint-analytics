@@ -48,9 +48,9 @@ class BPA_List_Table extends WP_List_Table {
 		$current_page = $this->get_pagenum();
 		$offset       = ( $current_page - 1 ) * $per_page;
 
-		$this->items = BPA_Admin::get_rows( $this->filters, $per_page, $offset );
+		$this->items = BPA_Admin::get_rows_cached( $this->filters, $per_page, $offset );
 
-		$total_items = BPA_Admin::count_consultants( $this->filters );
+		$total_items = BPA_Admin::count_consultants_cached( $this->filters );
 
 		$this->set_pagination_args(
 			array(

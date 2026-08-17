@@ -167,10 +167,173 @@ class BPA_Admin {
 	 * When did we last record anything at all?
 	 * This is the silent-failure detector.
 	 */
-	public static function get_last_activity() {
+	/**
+	 * When was each event type last recorded?
+	 * Used by the tracking health panel to spot silent failures.
+	 */
+	public static function get_activity_by_type() {
 		global $wpdb;
+
 		$table = BPA_Database::table_name();
-		return $wpdb->get_var( "SELECT MAX(created_at) FROM $table" );
+
+		$rows = $wpdb->get_results(
+			"SELECT event_type, MAX(created_at) AS last_seen
+			 FROM $table
+			 GROUP BY event_type",
+			ARRAY_A
+		);
+
+		$out = array(
+			'profile_view'  => null,
+			'phone_click'   => null,
+			'website_click' => null,
+		);
+
+		foreach ( (array) $rows as $row ) {
+			if ( array_key_exists( $row['event_type'], $out ) ) {
+				$out[ $row['event_type'] ] = $row['last_seen'];
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Renders the tracking health panel.
+	 */
+	private static function render_health_panel() {
+		$activity = self::get_activity_by_type();
+
+		$labels = array(
+			'profile_view'  => 'Profile views',
+			'phone_click'   => 'Phone interactions',
+			'website_click' => 'Website clicks',
+		);
+
+		// Anything older than this prompts a look. A judgement call, not a rule.
+		$stale_after = 7 * DAY_IN_SECONDS;
+		$now         = current_time( 'timestamp' );
+		$warnings    = array();
+
+		echo '<div class="bpa-health" style="background:#fff;border:1px solid #c3c4c7;padding:12px 16px;margin:16px 0">';
+		echo '<p style="margin:0 0 8px"><strong>Tracking health</strong> <span style="color:#646970">(all time)</span></p>';
+		echo '<ul style="margin:0">';
+
+		foreach ( $labels as $type => $label ) {
+			$last = $activity[ $type ];
+
+			if ( ! $last ) {
+				echo '<li style="color:#b32d2e">' . esc_html( $label ) . ': <strong>never recorded</strong></li>';
+				$warnings[] = $label;
+				continue;
+			}
+
+			$age     = $now - strtotime( $last );
+			$is_old  = $age > $stale_after;
+			$colour  = $is_old ? '#996800' : '#1d7d3f';
+			$suffix  = $is_old ? ' &mdash; worth checking' : '';
+
+			if ( $is_old ) {
+				$warnings[] = $label;
+			}
+
+			printf(
+				'<li style="color:%s">%s: last recorded <strong>%s</strong> (%s ago)%s</li>',
+				esc_attr( $colour ),
+				esc_html( $label ),
+				esc_html( $last ),
+				esc_html( human_time_diff( strtotime( $last ), $now ) ),
+				wp_kses_post( $suffix )
+			);
+		}
+
+		echo '</ul>';
+
+		if ( ! empty( $warnings ) ) {
+			echo '<p style="margin:8px 0 0;color:#996800">';
+			echo 'Some tracking looks stale. The most common cause is the Business ';
+			echo 'template being rebuilt without the phone or website elements. ';
+			echo 'See the plugin README before assuming it is a traffic drop.';
+			echo '</p>';
+		}
+
+		echo '</div>';
+	}
+
+		/**
+	 * How long dashboard results are remembered.
+	 */
+	const CACHE_SECONDS = 300; // 5 minutes
+
+	/**
+	 * Builds a cache name unique to this exact set of filters.
+	 */
+	private static function cache_key( $prefix, $parts ) {
+		return 'bpa_' . $prefix . '_' . md5( wp_json_encode( $parts ) );
+	}
+
+	/**
+	 * Should we skip the cache for this request?
+	 */
+	private static function bypass_cache() {
+		return isset( $_GET['bpa_refresh'] );
+	}
+
+	/**
+	 * Cached wrapper around get_rows().
+	 */
+	public static function get_rows_cached( $filters, $per_page, $offset ) {
+		$key = self::cache_key( 'rows', array( $filters, $per_page, $offset ) );
+
+		if ( ! self::bypass_cache() ) {
+			$cached = get_transient( $key );
+			if ( false !== $cached ) {
+				return $cached;
+			}
+		}
+
+		$rows = self::get_rows( $filters, $per_page, $offset );
+		set_transient( $key, $rows, self::CACHE_SECONDS );
+
+		return $rows;
+	}
+
+	/**
+	 * Cached wrapper around get_totals().
+	 */
+	public static function get_totals_cached( $filters ) {
+		$key = self::cache_key( 'totals', array( $filters ) );
+
+		if ( ! self::bypass_cache() ) {
+			$cached = get_transient( $key );
+			if ( false !== $cached ) {
+				return $cached;
+			}
+		}
+
+		$totals = self::get_totals( $filters );
+		set_transient( $key, $totals, self::CACHE_SECONDS );
+
+		return $totals;
+	}
+
+	/**
+	 * Cached wrapper around count_consultants().
+	 */
+	public static function count_consultants_cached( $filters ) {
+		$key = self::cache_key( 'count', array( $filters ) );
+
+		if ( ! self::bypass_cache() ) {
+			$cached = get_transient( $key );
+			if ( false !== $cached ) {
+				return $cached;
+			}
+		}
+
+		$count = self::count_consultants( $filters );
+		set_transient( $key, $count, self::CACHE_SECONDS );
+
+		return $count;
 	}
 
 	/**
@@ -218,9 +381,8 @@ class BPA_Admin {
 		}
 
 		$filters       = self::get_filters();
-		$totals        = self::get_totals( $filters );
+		$totals        = self::get_totals_cached( $filters );
 		$consultants   = self::get_consultant_options();
-		$last_activity = self::get_last_activity();
 
 		require_once BPA_PATH . 'includes/class-bpa-list-table.php';
 
@@ -231,18 +393,7 @@ class BPA_Admin {
 		<div class="wrap">
 			<h1>Blueprint Analytics</h1>
 
-			<?php if ( $last_activity ) : ?>
-				<p style="color:#646970">
-					Last visitor activity recorded:
-					<strong><?php echo esc_html( $last_activity ); ?></strong>
-					(site time)
-				</p>
-			<?php else : ?>
-				<div class="notice notice-warning inline">
-					<p><strong>No activity has ever been recorded.</strong>
-					If the site has had visitors, tracking may not be working.</p>
-				</div>
-			<?php endif; ?>
+			<?php self::render_health_panel(); ?>
 
 			<form method="get">
 				<input type="hidden" name="page" value="blueprint-analytics" />
@@ -270,6 +421,8 @@ class BPA_Admin {
 					<?php submit_button( 'Filter', 'secondary', '', false ); ?>
 					<a href="<?php echo esc_url( admin_url( 'admin.php?page=blueprint-analytics' ) ); ?>"
 						class="button">Reset</a>
+					<a href="<?php echo esc_url( add_query_arg( 'bpa_refresh', '1' ) ); ?>"
+						class="button" title="Bypass the 5-minute cache">Refresh data</a>
 				</p>
 			</form>
 
