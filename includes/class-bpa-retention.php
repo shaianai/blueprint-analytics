@@ -13,7 +13,7 @@ class BPA_Retention {
 	 * How many months of event data to keep.
 	 * Change this value to adjust retention.
 	 */
-	const RETENTION_MONTHS = 24;
+	const RETENTION_MONTHS = 12;
 
 	const HOOK = 'bpa_daily_cleanup';
 

@@ -107,7 +107,7 @@ fingerprint each day and cannot be tracked across days.
 
 ## Retention
 
-Events older than **24 months** are deleted daily.
+Events older than **12 months** are deleted daily.
 Change `BPA_Retention::RETENTION_MONTHS`.
 
 ## Files

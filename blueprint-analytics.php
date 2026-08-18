@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Blueprint Analytics
  * Description:       Admin-only consultant engagement analytics for Blueprint Collective.
- * Version:           0.1.1
+ * Version:           0.1.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            WYN Digital
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // The plugin's own version number.
-define( 'BPA_VERSION', '0.1.1' );
+define( 'BPA_VERSION', '0.1.2' );
 
 // The version of our database structure. We bump this when the table changes.
 define( 'BPA_DB_VERSION', '1' );
