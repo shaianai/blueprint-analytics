@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Blueprint Analytics
  * Description:       Admin-only consultant engagement analytics for Blueprint Collective.
- * Version:           0.1.0
+ * Version:           0.1.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            WYN Digital
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // The plugin's own version number.
-define( 'BPA_VERSION', '0.1.0' );
+define( 'BPA_VERSION', '0.1.1' );
 
 // The version of our database structure. We bump this when the table changes.
 define( 'BPA_DB_VERSION', '1' );
@@ -26,10 +26,6 @@ define( 'BPA_PATH', plugin_dir_path( __FILE__ ) );
 // The web address of the folder. We'll need this to load our JavaScript later.
 define( 'BPA_URL', plugin_dir_url( __FILE__ ) );
 
-/**
- * Temporary proof-of-life message in the admin.
- * We delete this in Step 2. It exists only to confirm the plugin is loading.
- */
 // Load our database class.
 require_once BPA_PATH . 'includes/class-bpa-database.php';
 
@@ -40,9 +36,15 @@ require_once BPA_PATH . 'includes/class-bpa-admin.php';
 
 function bpa_activate() {
 	BPA_Database::install();
-	BPA_Admin::add_capability();   // ← add this line
+	BPA_Admin::add_capability();
+	BPA_Retention::schedule();
 }
 register_activation_hook( __FILE__, 'bpa_activate' );
+
+function bpa_deactivate() {
+	BPA_Retention::unschedule();
+}
+register_deactivation_hook( __FILE__, 'bpa_deactivate' );
 
 add_action( 'admin_menu', 'BPA_Admin::register_menu' );
 
@@ -56,8 +58,6 @@ require_once BPA_PATH . 'includes/class-bpa-tracker.php';
 add_action( 'rest_api_init', 'BPA_Tracker::register_routes' );
 add_action( 'wp_enqueue_scripts', 'BPA_Tracker::enqueue_assets' );
 
-require_once BPA_PATH . 'includes/class-bpa-phone.php';
-// Shortcode approach kept for reference. Not used: the JS conversion
-// below handles both single and multi location templates without
-// requiring template changes.
-// add_action( 'init', 'BPA_Phone::register' );
+require_once BPA_PATH . 'includes/class-bpa-retention.php';
+
+add_action( BPA_Retention::HOOK, 'BPA_Retention::cleanup' );

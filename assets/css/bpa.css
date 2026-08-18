@@ -10,3 +10,12 @@
 }
 .bpa-phone-revealed { font-weight: 600; }
 .bpa-phone-none { color: #666; font-style: italic; }
+/*
+ * The Show Phone control is provided by the site's existing snippet.
+ * Elementor applies display:flex to .icon-flex links, which overrides
+ * the browser's default handling of the [hidden] attribute, leaving
+ * the number visible. This forces the hide to actually apply.
+ */
+a[href^="tel:"][hidden] {
+	display: none !important;
+}

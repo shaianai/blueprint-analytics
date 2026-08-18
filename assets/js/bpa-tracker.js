@@ -78,21 +78,26 @@
 	 * Website URL clicks.
 	 */
 	document.addEventListener( 'click', function ( e ) {
-		var link = e.target.closest( 'a.bpa-website-link' );
+		// The class may be on the link itself (multi-location repeater HTML)
+		// or on a wrapping element (Elementor's Advanced → CSS Classes puts
+		// it on the widget container). Handle both.
+		var scope = e.target.closest( '.bpa-website-link' );
+
+		if ( ! scope ) {
+			return;
+		}
+
+		var link = scope.matches( 'a' ) ? scope : e.target.closest( 'a' );
 
 		if ( ! link ) {
 			return;
 		}
 
 		if ( ! bpaIsTrackableUrl( link.getAttribute( 'href' ) ) ) {
-			return; // invalid or missing URL: record nothing
+			return;
 		}
 
 		bpaSend( 'website_click' );
-
-		// We do NOT call preventDefault(). The link behaves exactly
-		// as it always has, including opening in a new tab,
-		// middle-click, and right-click open-in-new-tab.
 	} );
 	/**
 	 * Converts each phone link into a Show Phone control.
@@ -102,56 +107,86 @@
 	 *
 	 * Fails open: if this does not run, the number stays visible.
 	 */
-	function bpaSetupPhoneControls() {
-		var links = document.querySelectorAll( 'a[href^="tel:"]' );
-
-		Array.prototype.forEach.call( links, function ( link, index ) {
-			// Skip anything already converted.
-			if ( link.getAttribute( 'data-bpa-phone-ready' ) ) {
-				return;
-			}
-
-			// Ignore links with no actual number, e.g. "contact via website".
-			var raw = link.getAttribute( 'href' ).replace( 'tel:', '' );
-			if ( ! /\d/.test( decodeURIComponent( raw ) ) ) {
-				return;
-			}
-
-			link.setAttribute( 'data-bpa-phone-ready', '1' );
-
-			var button = document.createElement( 'button' );
-			button.type = 'button';
-			button.className = 'bpa-phone-button';
-			button.textContent = 'Show Phone';
-			button.setAttribute( 'aria-expanded', 'false' );
-			button.setAttribute( 'aria-controls', 'bpa-phone-' + index );
-
-			link.id = 'bpa-phone-' + index;
-			link.hidden = true;
-
-			// Place the button where the link is.
-			link.parentNode.insertBefore( button, link );
-
-			button.addEventListener( 'click', function () {
-				// Guard against double-clicks firing twice.
-				if ( button.getAttribute( 'data-bpa-fired' ) ) {
-					return;
-				}
-				button.setAttribute( 'data-bpa-fired', '1' );
-
-				bpaSend( 'phone_click' );
-
-				link.hidden = false;
-				button.setAttribute( 'aria-expanded', 'true' );
-				button.hidden = true;
-
-				link.setAttribute( 'tabindex', '-1' );
-				link.focus();
-			} );
-		} );
+	/**
+	 * Phone reveal tracking.
+	 *
+	 * The Show Phone control is provided by the EXISTING site
+	 * implementation (inline snippet), not by this plugin. We only
+	 * observe it.
+	 *
+	 * Detection: a click where a tel: link in the same container is
+	 * currently hidden = a reveal. If the number is already visible,
+	 * the click is on the number itself and is NOT counted.
+	 *
+	 * Registered in the CAPTURE phase so we read the DOM before the
+	 * site's own handler reveals the number.
+	 */
+	function bpaIsHidden( el ) {
+		if ( ! el ) {
+			return false;
+		}
+		if ( el.hidden ) {
+			return true;
+		}
+		var style = window.getComputedStyle( el );
+		return 'none' === style.display || 'hidden' === style.visibility;
 	}
 
-	bpaSetupPhoneControls();
+	document.addEventListener( 'click', function ( e ) {
+		// Find the clickable thing that was clicked.
+		var trigger = e.target.closest( 'button, a, [role="button"]' );
+
+		if ( ! trigger ) {
+			return;
+		}
+
+		// Never count a click on the phone number itself.
+		if ( trigger.matches( 'a[href^="tel:"]' ) ) {
+			return;
+		}
+
+		// Only fire once per trigger.
+		if ( trigger.getAttribute( 'data-bpa-fired' ) ) {
+			return;
+		}
+
+		/*
+		 * Look for a hidden phone link nearby. We walk up a few levels
+		 * so this works for both the single-location Icon List and each
+		 * separate location block in the multi-location repeater.
+		 */
+		var scope = trigger.parentElement;
+		var hiddenPhone = null;
+		var levels = 0;
+
+		while ( scope && levels < 4 && ! hiddenPhone ) {
+			var candidates = scope.querySelectorAll( 'a[href^="tel:"]' );
+
+			for ( var i = 0; i < candidates.length; i++ ) {
+				if ( bpaIsHidden( candidates[ i ] ) ) {
+					hiddenPhone = candidates[ i ];
+					break;
+				}
+			}
+
+			scope = scope.parentElement;
+			levels++;
+		}
+
+		if ( ! hiddenPhone ) {
+			return; // not a phone reveal
+		}
+
+		// Ignore links with no actual digits, e.g. "contact via website".
+		var raw = hiddenPhone.getAttribute( 'href' ).replace( 'tel:', '' );
+		if ( ! /\d/.test( decodeURIComponent( raw ) ) ) {
+			return;
+		}
+
+		trigger.setAttribute( 'data-bpa-fired', '1' );
+		bpaSend( 'phone_click' );
+	}, true ); // ← true = capture phase
+
 	// Record the profile view.
 	bpaSend( 'profile_view' );
 }() );
